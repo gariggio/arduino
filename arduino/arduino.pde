@@ -10,10 +10,10 @@
 
 // Soglie sensibilità sensori
 #define DEEP_SWITCH_THRESHOLD 1000
-#define MIC_THRESHOLD 300
-#define PIR_THRESHOLD 300
+#define MIC_THRESHOLD 80
+#define PIR_THRESHOLD 1023
 
-#define NO_PEEK_INTERVAL  60000
+#define NO_PEEK_INTERVAL  6000
 
 #define IP_START 100
 #define UDP_MSG_FREE   "FREE"
@@ -23,11 +23,11 @@
 
 
 // Definizione Pin Digitali
-int ledRedPins[]   = { 0, 2, 4, 6 };  // An array of pin numbers to which LEDs are attached
-int ledGreenPins[] = { 1, 3, 5, 7 };  // An array of pin numbers to which LEDs are attached
+int ledRedPins[]   = { 4, 6, 8, 10 };  // An array of pin numbers to which LEDs are attached
+int ledGreenPins[] = { 5, 7, 9, 11 };  // An array of pin numbers to which LEDs are attached
 
 // Definizione Pin Analogici
-int deepSwitchPins[] = { 2, 3, 4, 5 }; // L'ultimo pin è di debug
+int deepSwitchPins[] = { 5, 4, 3, 2 }; // L'ultimo pin è di debug
 int micPin = 0;
 int pirPin = 1;
 
@@ -126,6 +126,8 @@ boolean handleSensors()
  
   // Microfono
   int micValue = analogRead(micPin);
+  //debugValue("Microfono", micValue);
+
   if (micValue > MIC_THRESHOLD) {
     lastPeekTime = millis();
     roomStatus[thisArduinoId] = BUSY;
@@ -156,6 +158,17 @@ boolean handleSensors()
     showLedStatus(thisArduinoId);
   }
   return statusChanged;
+}
+
+
+void debugValue(char* str, int value)
+{
+  if (debug) {
+    Serial.print(str);
+    Serial.print("=");
+    Serial.print(value);
+    Serial.println();
+  }
 }
 
 
@@ -252,6 +265,7 @@ int deepSwitchRead()
   int result = 0;
   for (int i = 0; i < 4; i++) {
     int analogValue = analogRead(deepSwitchPins[i]);
+    debugValue("AnalogValue", analogValue);
     if (analogValue > DEEP_SWITCH_THRESHOLD) {
       result += (1 << i);
     }
@@ -264,27 +278,33 @@ void setup()
 {
   // Start serial
   Serial.begin(9600);
-  clock = millis(); 
+  clock = millis();
+  
+  analogReference(DEFAULT);
+  delay(3000);
+  
+  // TODO: eliminare 
+  debug = true;
   
   // Setup digital and analog pins (INPUT/OUTPUT)
   for (int i = 0; i < 4; i++) {
     pinMode(ledRedPins[i], OUTPUT);
     pinMode(ledGreenPins[i], OUTPUT);
-    pinMode(deepSwitchPins[i], INPUT);
+    //pinMode(deepSwitchPins[i], INPUT);
   }
-  pinMode(micPin, INPUT);
-  pinMode(pirPin, INPUT);
+  //pinMode(micPin, INPUT);
+  //pinMode(pirPin, INPUT);
 
   // Lettura valore decimale impostato sul deep switch
   int deepSwitchValue = deepSwitchRead();
+  debugValue("DeepSwitch", deepSwitchValue);
   // Modalità di debug se è HIGH il quarto pin del deepSwitch
   
-  // TODO: eliminare 
-  debug = true;
+  
   // TODO: scommentare 
   //debug = (deepSwitchValue >= 8);
-  // I primi 3 pin del deepSwitch determinano l'identificativo numerico dato ad Arduino 
-  thisArduinoId = (deepSwitchValue % 8);
+  // I primi 2 pin del deepSwitch determinano l'identificativo numerico dato ad Arduino 
+  thisArduinoId = (deepSwitchValue % 4);
 
   // Determinazione dell'ultimo numero dell'indirizzo IP e del MAC Address
   ip[3] = IP_START + thisArduinoId;
@@ -336,6 +356,5 @@ void loop()
     }
     recTime[thisArduinoId] = millis();
   }
-  delay(10);
 }
 
