@@ -9,7 +9,7 @@
 #define OFF     4
 
 // Soglie sensibilità sensori
-#define MIC_THRESHOLD 80
+#define MIC_THRESHOLD 480
 #define PIR_THRESHOLD 1023
 
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
@@ -72,11 +72,9 @@ unsigned int port = 9876;
 // Remote port
 unsigned int remotePort;
 
-
-// Buffers for receiving and sending data
+// Buffer per l'invio e la ricezione dei messaggi UDP
 char inBuffer[UDP_TX_PACKET_MAX_SIZE];  // Buffer to hold incoming packet,
 char msgBuffer[UDP_TX_PACKET_MAX_SIZE]; // String to send to other device
-
 
 
 // Mostra lo stato di una stanza accendendo o spegnendo il LED corrispondente
@@ -251,12 +249,12 @@ void handleReceivedPacket(byte remoteIp[], char message[])
     }
   }
 }
- 
-  
-// Se non si ricevono pacchetti UDP di aggiornamento di stato dagli altri Arduino
+
+
+// Aggiorna lo stato (e corrispettivi Led) delle altre stanze in UNKNOWN (successivamente in OFF)
+// se non si ricevono pacchetti UDP di aggiornamento di stato dagli altri Arduino
 // per un lungo intervallo di tempo (UDP_NO_PACKET_INTERVAL millisecondi)
-// aggiorna lo stato della stanza (e corrispettvo Led) in UNKNOWN. Successivamente in OFF.
-void checkLedStatusUpdated()
+void checkAndUpdateStatusOfOtherRooms()
 {
   unsigned long clock = millis();
   for (int i=0; i<4; i++) {
@@ -281,7 +279,7 @@ void checkLedStatusUpdated()
 }
 
 
-// E' ora d'inviare agli altri Arduino un aggiornamento di stato della stanza corrente?
+// E' ora d'inviare agli altri Arduino un aggiornamento dello stato della stanza corrente?
 boolean itsTimeToSendAnUpdate()
 {
   unsigned long clock = millis();
@@ -291,7 +289,7 @@ boolean itsTimeToSendAnUpdate()
 }
 
 
-// Restituisce il corrispondente valore intero indicato come bit sul Dip Switch
+// Legge dal Dip Switch il numero intero (Gli interruttori On/Off sono interpretati come bit)
 int dipSwitchRead()
 {
   int result = 0;
@@ -329,7 +327,7 @@ void setup()
   int dipSwitchValue = dipSwitchRead();
   debugValue("Dip Switch", dipSwitchValue);
 
-  // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato ad Arduino 
+  // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato a questo Arduino 
   thisArduinoId = (dipSwitchValue % 4);
 
   // Visualizzazione dello stato iniziale dei Led (UNKNOWN)
@@ -362,8 +360,8 @@ void loop()
     handleReceivedPacket(remoteIp, inBuffer);
   }
   
-  // Aggiorna lo stato dei Led se non ricevo aggiornamenti dagli altri Arduino
-  checkLedStatusUpdated();
+  // Aggiorna lo stato (e i Led) delle altre stanze se non ricevo pacchetti di aggiornamento dalla rete
+  checkAndUpdateStatusOfOtherRooms();
   
   // Aggiornamento stato stanza controllando i sensori
   boolean statusChanged = updateStatusOfThisRoom();
