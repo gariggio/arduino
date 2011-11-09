@@ -24,8 +24,8 @@
 #define UDP_SEND_STATUS_FREQUENCY  5000
 
 // Se non si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
-// si considera la stanza nello stato UNKNOWN.
-// Se NON si ricevono pacchetti per 3 volte questo tempo si considera la stanza nello stato OFF.
+// lo stato della stanza diventa UNKNOWN.
+// Se NON si ricevono pacchetti per 3 volte questo tempo lo stato diventa OFF.
 #define UDP_NO_PACKET_INTERVAL     40000
 #define IP_START 100
 
@@ -45,8 +45,9 @@ unsigned long recTime[] = { 0, 0, 0, 0 };
 // Stato delle varie stanze
 int roomStatus[] = { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN };
 
-// Identificativo di questo Arduino (Valori possibili: 0..3)
-int thisArduinoId = 0;
+// Identificativo della stanza corrispondente a questo Arduino
+// Valore letto dal Dip Switch (Valori possibili: 0..3)
+int thisRoomId = 0;
 
 // Modalità di debug? E' stabilita dal Dip Switch.
 boolean debug = false;
@@ -136,7 +137,7 @@ char* getUdpMessageStatus(int deviceStatus)
 // Ritorna true se lo stato è cambiato.
 boolean updateStatusOfThisRoom()
 {
-  int oldStatus = roomStatus[thisArduinoId];
+  int oldStatus = roomStatus[thisRoomId];
  
   // Microfono
   int micValue = analogRead(micPin);
@@ -144,19 +145,19 @@ boolean updateStatusOfThisRoom()
 
   if (micValue > MIC_THRESHOLD) {
     lastPeekTime = millis();
-    roomStatus[thisArduinoId] = BUSY;
+    roomStatus[thisRoomId] = BUSY;
   }
 
   // Sensore di movimento
   int pirValue = analogRead(pirPin);
+  //debugValue("PIR", pirValue);
   if (pirValue > PIR_THRESHOLD) {
     lastPeekTime = millis();
-    roomStatus[thisArduinoId] = BUSY;
+    roomStatus[thisRoomId] = BUSY;
   }
 
-  // Numero di millisecondi trascorsi
   unsigned long clock = millis();
-  if (roomStatus[thisArduinoId] == BUSY) {
+  if (roomStatus[thisRoomId] == BUSY) {
     if (clock < lastPeekTime) {
       // Gestione clock overflow
       lastPeekTime = 0;
@@ -164,14 +165,14 @@ boolean updateStatusOfThisRoom()
     if (clock > lastPeekTime + NO_PEEK_INTERVAL) {
       // Sono trascorsi NO_PEEK_INTERVAL millisecondi senza rilevare picchi su microfono e pir
       // La risorsa monitorata da Artuino diventa FREE
-      roomStatus[thisArduinoId] = FREE;
+      roomStatus[thisRoomId] = FREE;
     }
   } else {
-    roomStatus[thisArduinoId] = FREE;
+    roomStatus[thisRoomId] = FREE;
   }
-  boolean statusChanged = (roomStatus[thisArduinoId] != oldStatus);
+  boolean statusChanged = (roomStatus[thisRoomId] != oldStatus);
   if (statusChanged) {
-    showRoomStatus(thisArduinoId);
+    showRoomStatus(thisRoomId);
   }
   return statusChanged;
 }
@@ -218,11 +219,11 @@ void debugPacket(char* str, byte ip[], int port, char* packet)
 // Gestione di un Pacchetto UDP rivevuto
 void handleReceivedPacket(byte remoteIp[], char message[])
 {
-  // TODO: decidere la modalità di definizione del roomNumber
-  //       Dall'IP o dal contenuto del paccheto?
+  // TODO: stabilire come determinare il roomNumber.
+  // Dall'IP o da un identificativo dentro al pacchetto?
   
   //int roomNumber = remoteIp[3] - IP_START;
-  int roomNumber = int(message[0])-int('0');
+  int roomNumber = int(message[0]) - int('0');
   for (int i=1; i<=strlen(message); i++) {
      message[i-1] = message[i];
   }
@@ -234,7 +235,7 @@ void handleReceivedPacket(byte remoteIp[], char message[])
     Serial.print(message);
     Serial.println("]");
   }
-    
+
   if (roomNumber >= 0 && roomNumber < 4) {
     if (strcmp(message, UDP_MSG_FREE) == 0) {
       recTime[roomNumber] = millis();
@@ -258,7 +259,7 @@ void checkAndUpdateStatusOfOtherRooms()
 {
   unsigned long clock = millis();
   for (int i=0; i<4; i++) {
-    if (i != thisArduinoId) {
+    if (i != thisRoomId) {
       if (clock < recTime[i]) {
         // Gestione clock overflow
         recTime[i] = 0;
@@ -283,8 +284,8 @@ void checkAndUpdateStatusOfOtherRooms()
 boolean itsTimeToSendAnUpdate()
 {
   unsigned long clock = millis();
-  return (clock < recTime[thisArduinoId])  // Clock overflow
-      || (clock > recTime[thisArduinoId] + UDP_SEND_STATUS_FREQUENCY) // Trascorsi UDP_SEND_STATUS_FREQUENCY millisecondi dall'ultimo invio
+  return (clock < recTime[thisRoomId])  // Clock overflow
+      || (clock > recTime[thisRoomId] + UDP_SEND_STATUS_FREQUENCY) // Sono trascorsi UDP_SEND_STATUS_FREQUENCY millisecondi dall'ultimo invio
       ;
 }
 
@@ -299,8 +300,7 @@ int dipSwitchRead()
       result += (1 << i);
     }
   }
-
-  // Siamo in modalità di debug se è HIGH il quarto pin del dipSwitch
+  // Siamo in modalità di debug se è HIGH il quarto pin del Dip Switch
   debug = (result >= 8);
   // TODO: eliminare 
   debug = true;
@@ -328,7 +328,7 @@ void setup()
   debugValue("Dip Switch", dipSwitchValue);
 
   // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato a questo Arduino 
-  thisArduinoId = (dipSwitchValue % 4);
+  thisRoomId = (dipSwitchValue % 4);
 
   // Visualizzazione dello stato iniziale dei Led (UNKNOWN)
   for (int i=0; i<4; i++) {
@@ -336,8 +336,8 @@ void setup()
   }
 
   // Set dell'ultimo numero dell'indirizzo IP e del MAC Address
-  ip[3] = IP_START + thisArduinoId;
-  mac[5] = thisArduinoId;
+  ip[3] = IP_START + thisRoomId;
+  mac[5] = thisRoomId;
   debugPacket("IP Address:", ip, port, "");
 
   // Start Ethernet and UDP
@@ -368,11 +368,11 @@ void loop()
   
   if (statusChanged || itsTimeToSendAnUpdate()) {
     // Invio aggiornamento di stato in broadcast (remote IP)
-    String strBuffer = String(thisArduinoId) + getUdpMessageStatus(roomStatus[thisArduinoId]);
+    String strBuffer = String(thisRoomId) + getUdpMessageStatus(roomStatus[thisRoomId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
     Udp.sendPacket(msgBuffer, broadcastIp, port);
     debugPacket("Sent Packet:", broadcastIp, port, msgBuffer);
-    recTime[thisArduinoId] = millis();
+    recTime[thisRoomId] = millis();
   }
 }
 
