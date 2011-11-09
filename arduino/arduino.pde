@@ -2,7 +2,7 @@
 #include <Ethernet.h>
 #include <Udp.h>         // UDP library from: bjoern@cs.stanford.edu 12/30/2008
 
-
+// Stati delle stanze
 #define FREE    1
 #define BUSY    2
 #define UNKNOWN 3
@@ -12,13 +12,22 @@
 #define MIC_THRESHOLD 80
 #define PIR_THRESHOLD 1023
 
+// Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
 #define NO_PEEK_INTERVAL  6000
 
-#define IP_START 100
+// Il testo dei messaggi UDP
+// NB: viene anteposto a queste stringhe l'identificativo dell'arduino che ha generato il messaggio
 #define UDP_MSG_FREE   "FREE"
 #define UDP_MSG_BUSY   "BUSY"
+
+// Frequenza d'invio dei pacchetti UDP broadcast di aggiornamento di stato verso gli altri Arduino
 #define UDP_SEND_STATUS_FREQUENCY  5000
+
+// Se non si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
+// si considera la stanza nello stato UNKNOWN.
+// Se NON si ricevono pacchetti per 3 volte questo tempo si considera la stanza nello stato OFF.
 #define UDP_NO_PACKET_INTERVAL     40000
+#define IP_START 100
 
 
 // Definizione Pin Digitali
@@ -26,80 +35,85 @@ int ledRedPins[]    = { 4, 6, 8, 10 };  // An array of pin numbers to which LEDs
 int ledGreenPins[]  = { 5, 7, 9, 11 };  // An array of pin numbers to which LEDs are attached
 int dipSwitchPins[] = { 0, 1, 2, 3  };  // An array of pin numbers to which Dip Switch is attached
 					// L'ultimo pin è di debug
-
 // Definizione Pin Analogici
 int micPin = 0;
 int pirPin = 1;
 
-
-// Numero di millisecondi trascorsi
-unsigned long clock = 0;
-
 // Istante di ricezione (invio) dell'ultimo pacchetto UPD da ciascun Arduino
 unsigned long recTime[] = { 0, 0, 0, 0 };
 
-// Stato delle varie stanze monitorate dai 4 Arduino
+// Stato delle varie stanze
 int roomStatus[] = { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN };
 
-// Identificativo di questo Arduino
+// Identificativo di questo Arduino (Valori possibili: 0..3)
 int thisArduinoId = 0;
 
-// Modalità di debug?
+// Modalità di debug? E' stabilita dal Dip Switch.
 boolean debug = false;
 
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
 unsigned long lastPeekTime = 0;
 
-// MAC address
+// MAC address della scheda Ethernet
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
-// The IP address (Ethernet Shield)
-byte ip[]  = { 192, 168, 0, 100 };
+// Indirizzo IP della scheda Ethernet
+byte ip[4]  = { 192, 168, 0, IP_START };
 
-// Broadcast IP (dove inviare i pacchetti UDP)
+// Broadcast IP (dove inviare i pacchetti UDP broadcast)
 byte broadcastIp[4] = { 192, 168, 0, 255 };
+
+// Remote IP (da quale indirizzo ho ricevuto l'ultimo pacchetto UDP)
+byte remoteIp[4] = { 0, 0, 0, 0 };
 
 // Local port to listen on
 unsigned int port = 9876;
 
-byte remoteIp[4] = { 0, 0, 0, 0 };
+// Remote port
 unsigned int remotePort;
 
 
 // Buffers for receiving and sending data
 char inBuffer[UDP_TX_PACKET_MAX_SIZE];  // Buffer to hold incoming packet,
-char msgBuffer[UDP_TX_PACKET_MAX_SIZE];   // String to send to other device
+char msgBuffer[UDP_TX_PACKET_MAX_SIZE]; // String to send to other device
 
 
-void showLedStatus(int deviceNumber)
+
+// Mostra lo stato di una stanza accendendo o spegnendo il LED corrispondente
+void showRoomStatus(int roomNumber)
 {
-  switch (roomStatus[deviceNumber]) {
+  switch (roomStatus[roomNumber]) {
     case FREE:
-      digitalWrite(ledRedPins[deviceNumber], LOW);
-      digitalWrite(ledGreenPins[deviceNumber], HIGH);
+      // Verde
+      digitalWrite(ledRedPins[roomNumber], LOW);
+      digitalWrite(ledGreenPins[roomNumber], HIGH);
       break;
     case BUSY:
-      digitalWrite(ledRedPins[deviceNumber], HIGH);
-      digitalWrite(ledGreenPins[deviceNumber], LOW);
+      // Rossi
+      digitalWrite(ledRedPins[roomNumber], HIGH);
+      digitalWrite(ledGreenPins[roomNumber], LOW);
       break;
     case UNKNOWN:
-      digitalWrite(ledRedPins[deviceNumber], HIGH);
-      digitalWrite(ledGreenPins[deviceNumber], HIGH);
+      // Arancione
+      digitalWrite(ledRedPins[roomNumber], HIGH);
+      digitalWrite(ledGreenPins[roomNumber], HIGH);
       break;
     case OFF:
-      digitalWrite(ledRedPins[deviceNumber], LOW);
-      digitalWrite(ledGreenPins[deviceNumber], LOW);
+      // Spento
+      digitalWrite(ledRedPins[roomNumber], LOW);
+      digitalWrite(ledGreenPins[roomNumber], LOW);
       break;
   }
   if (debug) {
     Serial.print("Led ");
-    Serial.print(deviceNumber);
+    Serial.print(roomNumber);
     Serial.print(" ");
-    Serial.println(getUdpMessageStatus(roomStatus[deviceNumber]));
+    Serial.println(getUdpMessageStatus(roomStatus[roomNumber]));
   }
 }
 
 
+// Restituisce il messaggio UDP corrispondente allo stato passato
 char* getUdpMessageStatus(int deviceStatus)
 {
   switch (deviceStatus) {
@@ -119,10 +133,10 @@ char* getUdpMessageStatus(int deviceStatus)
 }
 
 
-
-// Legge e mostra lo stato di Arduino sul led preposto
-// Ritorna true se lo stato è cambiato
-boolean handleSensors()
+// Aggiorna lo stato della stanza di questo Arduino
+// e lo visualizza sul Led corrispondente. 
+// Ritorna true se lo stato è cambiato.
+boolean updateStatusOfThisRoom()
 {
   int oldStatus = roomStatus[thisArduinoId];
  
@@ -142,7 +156,8 @@ boolean handleSensors()
     roomStatus[thisArduinoId] = BUSY;
   }
 
-  clock = millis();
+  // Numero di millisecondi trascorsi
+  unsigned long clock = millis();
   if (roomStatus[thisArduinoId] == BUSY) {
     if (clock < lastPeekTime) {
       // Gestione clock overflow
@@ -158,12 +173,13 @@ boolean handleSensors()
   }
   boolean statusChanged = (roomStatus[thisArduinoId] != oldStatus);
   if (statusChanged) {
-    showLedStatus(thisArduinoId);
+    showRoomStatus(thisArduinoId);
   }
   return statusChanged;
 }
 
 
+// Stampa sulla seriale il valore intero indicato
 void debugValue(char* str, int value)
 {
   if (debug) {
@@ -175,6 +191,7 @@ void debugValue(char* str, int value)
 }
 
 
+// Stampa sulla seriale le informazioni di un Pacchetto
 void debugPacket(char* str, byte ip[], int port, char* packet)
 {
   if (debug) {
@@ -200,34 +217,35 @@ void debugPacket(char* str, byte ip[], int port, char* packet)
 }
 
 
+// Gestione di un Pacchetto UDP rivevuto
 void handleReceivedPacket(byte remoteIp[], char message[])
 {
-  // TODO: decidere la modalità di definizione del deviceNumber
+  // TODO: decidere la modalità di definizione del roomNumber
   //       Dall'IP o dal contenuto del paccheto?
   
-  //int deviceNumber = remoteIp[3]- IP_START;
-  int deviceNumber = int(message[0])-int('0');
+  //int roomNumber = remoteIp[3] - IP_START;
+  int roomNumber = int(message[0])-int('0');
   for (int i=1; i<=strlen(message); i++) {
      message[i-1] = message[i];
   }
   
   if (debug) {
-    Serial.print("DeviceNumber recognized=");
-    Serial.print(deviceNumber);
+    Serial.print("RoomNumber recognized=");
+    Serial.print(roomNumber);
     Serial.print(" Message recognized=[");
     Serial.print(message);
     Serial.println("]");
   }
     
-  if (deviceNumber >= 0 && deviceNumber < 4) {
+  if (roomNumber >= 0 && roomNumber < 4) {
     if (strcmp(message, UDP_MSG_FREE) == 0) {
-      recTime[deviceNumber] = millis();
-      roomStatus[deviceNumber] = FREE;
-      showLedStatus(deviceNumber);
+      recTime[roomNumber] = millis();
+      roomStatus[roomNumber] = FREE;
+      showRoomStatus(roomNumber);
     } else if (strcmp(message, UDP_MSG_BUSY) == 0) {
-      recTime[deviceNumber] = millis();
-      roomStatus[deviceNumber] = BUSY;
-      showLedStatus(deviceNumber);
+      recTime[roomNumber] = millis();
+      roomStatus[roomNumber] = BUSY;
+      showRoomStatus(roomNumber);
     } else if (debug) {
       Serial.println("Messaggio ignorato!");
     }
@@ -235,14 +253,12 @@ void handleReceivedPacket(byte remoteIp[], char message[])
 }
  
   
-// Controlla ed eventualmente aggiorna lo stato dei led relativi agli altri Arduino.
-// Se non si ricevono pacchetti UDP di aggiornamento dello stato dalla rete
+// Se non si ricevono pacchetti UDP di aggiornamento di stato dagli altri Arduino
 // per un lungo intervallo di tempo (UDP_NO_PACKET_INTERVAL millisecondi)
-// lo stato non è più significativo e deve quindi essere cambiato in UNKNOWN
-// ed eventualmente in OFF
+// aggiorna lo stato della stanza (e corrispettvo Led) in UNKNOWN. Successivamente in OFF.
 void checkLedStatusUpdated()
 {
-  clock = millis();
+  unsigned long clock = millis();
   for (int i=0; i<4; i++) {
     if (i != thisArduinoId) {
       if (clock < recTime[i]) {
@@ -252,12 +268,12 @@ void checkLedStatusUpdated()
       if (roomStatus[i] < UNKNOWN) {
         if (clock > recTime[i] + UDP_NO_PACKET_INTERVAL) {
 	  roomStatus[i] = UNKNOWN;
-          showLedStatus(i);
+          showRoomStatus(i);
         }
       } else if (roomStatus[i] == UNKNOWN) {
         if (clock > recTime[i] + 3 * UDP_NO_PACKET_INTERVAL) {
           roomStatus[i] = OFF;
-	  showLedStatus(i);
+	  showRoomStatus(i);
         }
       }
     }
@@ -265,6 +281,17 @@ void checkLedStatusUpdated()
 }
 
 
+// E' ora d'inviare agli altri Arduino un aggiornamento di stato della stanza corrente?
+boolean itsTimeToSendAnUpdate()
+{
+  unsigned long clock = millis();
+  return (clock < recTime[thisArduinoId])  // Clock overflow
+      || (clock > recTime[thisArduinoId] + UDP_SEND_STATUS_FREQUENCY) // Trascorsi UDP_SEND_STATUS_FREQUENCY millisecondi dall'ultimo invio
+      ;
+}
+
+
+// Restituisce il corrispondente valore intero indicato come bit sul Dip Switch
 int dipSwitchRead()
 {
   int result = 0;
@@ -287,7 +314,6 @@ void setup()
 {
   // Start serial
   Serial.begin(9600);
-  clock = millis();
   
   analogReference(DEFAULT);
   delay(1500);
@@ -308,7 +334,7 @@ void setup()
 
   // Visualizzazione dello stato iniziale dei Led (UNKNOWN)
   for (int i=0; i<4; i++) {
-    showLedStatus(i);
+    showRoomStatus(i);
   }
 
   // Set dell'ultimo numero dell'indirizzo IP e del MAC Address
@@ -324,26 +350,25 @@ void setup()
 }
 
 
+
 void loop()
 {
-  // if there's data available, read a packet
   int packetSize = Udp.available(); // note that this includes the UDP header
   if (packetSize) {
     packetSize = packetSize - 8; // subtract the 8 byte header
-    // read the packet into packetBufffer and get the senders IP addr and port number
+    // Lettura pacchetto
     Udp.readPacket(inBuffer, UDP_TX_PACKET_MAX_SIZE, remoteIp, remotePort);
     debugPacket("Received Packet:", remoteIp, remotePort, inBuffer);
     handleReceivedPacket(remoteIp, inBuffer);
   }
   
+  // Aggiorna lo stato dei Led se non ricevo aggiornamenti dagli altri Arduino
   checkLedStatusUpdated();
   
-  boolean statusChanged = handleSensors();
+  // Aggiornamento stato stanza controllando i sensori
+  boolean statusChanged = updateStatusOfThisRoom();
   
-  clock = millis();
-  if (statusChanged
-	|| clock < recTime[thisArduinoId]
-	|| clock > recTime[thisArduinoId] + UDP_SEND_STATUS_FREQUENCY) {
+  if (statusChanged || itsTimeToSendAnUpdate()) {
     // Invio aggiornamento di stato in broadcast (remote IP)
     String strBuffer = String(thisArduinoId) + getUdpMessageStatus(roomStatus[thisArduinoId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
