@@ -45,7 +45,7 @@ int roomStatus[] = { UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN };
 int thisArduinoId = 0;
 
 // Modalità di debug?
-boolean debug;
+boolean debug = false;
 
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
 unsigned long lastPeekTime = 0;
@@ -172,8 +172,9 @@ void debugValue(char* str, int value)
 }
 
 
-void printPacket(char* str, byte ip[], int port, char* packet)
+void debugPacket(char* str, byte ip[], int port, char* packet)
 {
+  if (debug) {
     Serial.print(str);
     Serial.print(" ");
     Serial.print(int(ip[0]));
@@ -192,6 +193,7 @@ void printPacket(char* str, byte ip[], int port, char* packet)
     } else {
       Serial.println();
     }
+  }
 }
 
 
@@ -269,6 +271,12 @@ int dipSwitchRead()
       result += (1 << i);
     }
   }
+
+  // TODO: eliminare 
+  debug = true;
+  // Siamo in modalità di debug se è HIGH il quarto pin del dipSwitch
+  // TODO: scommentare 
+  //debug = (result >= 8);
   return result;
 }
 
@@ -280,10 +288,7 @@ void setup()
   clock = millis();
   
   analogReference(DEFAULT);
-  delay(3000);
-  
-  // TODO: eliminare 
-  debug = true;
+  delay(1500);
   
   // Setup digital and analog pins (INPUT/OUTPUT)
   for (int i = 0; i < 4; i++) {
@@ -291,36 +296,29 @@ void setup()
     pinMode(ledGreenPins[i], OUTPUT);
     pinMode(dipSwitchPins[i], INPUT);
   }
-  //pinMode(micPin, INPUT);
-  //pinMode(pirPin, INPUT);
 
   // Lettura valore decimale impostato sul dip switch
   int dipSwitchValue = dipSwitchRead();
   debugValue("Dip Switch", dipSwitchValue);
-  // Modalità di debug se è HIGH il quarto pin del dipSwitch
-  
-  
-  // TODO: scommentare 
-  //debug = (dipSwitchValue >= 8);
+
   // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato ad Arduino 
   thisArduinoId = (dipSwitchValue % 4);
 
-  // Determinazione dell'ultimo numero dell'indirizzo IP e del MAC Address
-  ip[3] = IP_START + thisArduinoId;
-  mac[5] = thisArduinoId;
-
+  // Visualizzazione dello stato iniziale dei Led (UNKNOWN)
   for (int i=0; i<4; i++) {
     showLedStatus(i);
   }
 
+  // Set dell'ultimo numero dell'indirizzo IP e del MAC Address
+  ip[3] = IP_START + thisArduinoId;
+  mac[5] = thisArduinoId;
+  debugPacket("IP Address:", ip, port, "");
+
   // Start Ethernet and UDP
   Ethernet.begin(mac, ip);
   Udp.begin(port);
-  if (debug) {
-    printPacket("IP Address:", ip, port, "");
-  }
   
-  delay(3000);
+  delay(2000);
 }
 
 
@@ -332,9 +330,7 @@ void loop()
     packetSize = packetSize - 8; // subtract the 8 byte header
     // read the packet into packetBufffer and get the senders IP addr and port number
     Udp.readPacket(inBuffer, UDP_TX_PACKET_MAX_SIZE, remoteIp, remotePort);
-    if (debug) {
-      printPacket("Received packet:", remoteIp, remotePort, inBuffer);
-    }
+    debugPacket("Received Packet:", remoteIp, remotePort, inBuffer);
     handleReceivedPacket(remoteIp, inBuffer);
   }
   
@@ -350,10 +346,10 @@ void loop()
     String strBuffer = String(thisArduinoId) + getUdpMessageStatus(roomStatus[thisArduinoId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
     Udp.sendPacket(msgBuffer, broadcastIp, port);
-    if (debug) {
-      printPacket("Sent packet:", broadcastIp, port, msgBuffer);
-    }
+    debugPacket("Snet Packet:", broadcastIp, port, msgBuffer);
     recTime[thisArduinoId] = millis();
   }
 }
+
+
 
