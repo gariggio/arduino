@@ -344,7 +344,7 @@ void loop()
   if (statusChanged
 	|| clock < recTime[thisArduinoId]
 	|| clock > recTime[thisArduinoId] + UDP_SEND_STATUS_FREQUENCY) {
-    // Invio aggiornamento di stato broadcast (remote IP)
+    // Invio aggiornamento di stato in broadcast (remote IP)
     String strBuffer = String(thisArduinoId) + getUdpMessageStatus(roomStatus[thisArduinoId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
     Udp.sendPacket(msgBuffer, broadcastIp, port);
