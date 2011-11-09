@@ -9,7 +9,6 @@
 #define OFF     4
 
 // Soglie sensibilità sensori
-#define DEEP_SWITCH_THRESHOLD 1000
 #define MIC_THRESHOLD 80
 #define PIR_THRESHOLD 1023
 
@@ -23,11 +22,12 @@
 
 
 // Definizione Pin Digitali
-int ledRedPins[]   = { 4, 6, 8, 10 };  // An array of pin numbers to which LEDs are attached
-int ledGreenPins[] = { 5, 7, 9, 11 };  // An array of pin numbers to which LEDs are attached
+int ledRedPins[]    = { 4, 6, 8, 10 };  // An array of pin numbers to which LEDs are attached
+int ledGreenPins[]  = { 5, 7, 9, 11 };  // An array of pin numbers to which LEDs are attached
+int dipSwitchPins[] = { 0, 1, 2, 3  };  // An array of pin numbers to which Dip Switch is attached
+					// L'ultimo pin è di debug
 
 // Definizione Pin Analogici
-int deepSwitchPins[] = { 5, 4, 3, 2 }; // L'ultimo pin è di debug
 int micPin = 0;
 int pirPin = 1;
 
@@ -260,13 +260,12 @@ void checkLedStatusUpdated()
 }
 
 
-int deepSwitchRead()
+int dipSwitchRead()
 {
   int result = 0;
   for (int i = 0; i < 4; i++) {
-    int analogValue = analogRead(deepSwitchPins[i]);
-    debugValue("AnalogValue", analogValue);
-    if (analogValue > DEEP_SWITCH_THRESHOLD) {
+    int digitalValue = digitalRead(dipSwitchPins[i]);
+    if (digitalValue == HIGH) {
       result += (1 << i);
     }
   }
@@ -290,21 +289,21 @@ void setup()
   for (int i = 0; i < 4; i++) {
     pinMode(ledRedPins[i], OUTPUT);
     pinMode(ledGreenPins[i], OUTPUT);
-    //pinMode(deepSwitchPins[i], INPUT);
+    pinMode(dipSwitchPins[i], INPUT);
   }
   //pinMode(micPin, INPUT);
   //pinMode(pirPin, INPUT);
 
-  // Lettura valore decimale impostato sul deep switch
-  int deepSwitchValue = deepSwitchRead();
-  debugValue("DeepSwitch", deepSwitchValue);
-  // Modalità di debug se è HIGH il quarto pin del deepSwitch
+  // Lettura valore decimale impostato sul dip switch
+  int dipSwitchValue = dipSwitchRead();
+  debugValue("Dip Switch", dipSwitchValue);
+  // Modalità di debug se è HIGH il quarto pin del dipSwitch
   
   
   // TODO: scommentare 
-  //debug = (deepSwitchValue >= 8);
-  // I primi 2 pin del deepSwitch determinano l'identificativo numerico dato ad Arduino 
-  thisArduinoId = (deepSwitchValue % 4);
+  //debug = (dipSwitchValue >= 8);
+  // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato ad Arduino 
+  thisArduinoId = (dipSwitchValue % 4);
 
   // Determinazione dell'ultimo numero dell'indirizzo IP e del MAC Address
   ip[3] = IP_START + thisArduinoId;
