@@ -35,7 +35,7 @@ int pirPin = 1;
 // Numero di millisecondi trascorsi
 unsigned long clock = 0;
 
-// Istante di ricezione/d'invio dell'ultimo pacchetto UPD da/per ciascun Arduino
+// Istante di ricezione (invio) dell'ultimo pacchetto UPD da ciascun Arduino
 unsigned long recTime[] = { 0, 0, 0, 0 };
 
 // Stato delle varie stanze monitorate dai 4 Arduino
@@ -50,13 +50,15 @@ boolean debug = false;
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
 unsigned long lastPeekTime = 0;
 
-
 // MAC address
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+
 // The IP address (Ethernet Shield)
 byte ip[]  = { 192, 168, 0, 100 };
+
 // Broadcast IP (dove inviare i pacchetti UDP)
 byte broadcastIp[4] = { 192, 168, 0, 255 };
+
 // Local port to listen on
 unsigned int port = 9876;
 
@@ -132,6 +134,7 @@ boolean handleSensors()
     lastPeekTime = millis();
     roomStatus[thisArduinoId] = BUSY;
   }
+
   // Sensore di movimento
   int pirValue = analogRead(pirPin);
   if (pirValue > PIR_THRESHOLD) {
@@ -272,11 +275,10 @@ int dipSwitchRead()
     }
   }
 
+  // Siamo in modalità di debug se è HIGH il quarto pin del dipSwitch
+  debug = (result >= 8);
   // TODO: eliminare 
   debug = true;
-  // Siamo in modalità di debug se è HIGH il quarto pin del dipSwitch
-  // TODO: scommentare 
-  //debug = (result >= 8);
   return result;
 }
 
@@ -346,7 +348,7 @@ void loop()
     String strBuffer = String(thisArduinoId) + getUdpMessageStatus(roomStatus[thisArduinoId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
     Udp.sendPacket(msgBuffer, broadcastIp, port);
-    debugPacket("Snet Packet:", broadcastIp, port, msgBuffer);
+    debugPacket("Sent Packet:", broadcastIp, port, msgBuffer);
     recTime[thisArduinoId] = millis();
   }
 }
