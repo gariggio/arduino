@@ -363,7 +363,7 @@ void loop()
   // Aggiorna lo stato (e i Led) delle altre stanze se non ricevo pacchetti di aggiornamento dalla rete
   checkAndUpdateStatusOfOtherRooms();
   
-  // Aggiornamento stato stanza controllando i sensori
+  // Aggiornamento dello stato della stanza (utilizzando i sensori)
   boolean statusChanged = updateStatusOfThisRoom();
   
   if (statusChanged || itsTimeToSendAnUpdate()) {
