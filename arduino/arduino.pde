@@ -359,7 +359,8 @@ void loop()
     handleReceivedPacket(remoteIp, inBuffer);
   }
   
-  // Aggiorna lo stato (e i Led) delle altre stanze se non ricevo pacchetti di aggiornamento dalla rete
+  // Aggiorna lo stato (e i Led) delle altre stanze
+  // se non si ricevono pacchetti di aggiornamento dalla rete
   checkAndUpdateStatusOfOtherRooms();
   
   // Aggiornamento dello stato della stanza (utilizzando i sensori)
