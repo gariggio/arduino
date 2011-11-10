@@ -13,7 +13,7 @@
 #define PIR_THRESHOLD 1023
 
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
-#define NO_PEAK_INTERVAL  (debug ? 6000 : 400)
+#define NO_PEAK_INTERVAL  (debug ? 6000 : 333)
 
 // Il testo dei messaggi UDP
 // NB: viene anteposto a queste stringhe l'identificativo dell'arduino che ha generato il messaggio
@@ -26,7 +26,7 @@
 // Se non si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
 // lo stato della stanza diventa UNKNOWN.
 // Se NON si ricevono pacchetti per 3 volte questo tempo lo stato diventa OFF.
-#define UDP_NO_PACKET_INTERVAL     40000
+#define UDP_NO_PACKET_INTERVAL    40000
 #define IP_START 100
 
 
