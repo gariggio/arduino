@@ -13,7 +13,7 @@
 #define PIR_THRESHOLD 1023
 
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
-#define NO_PEEK_INTERVAL  6000
+#define NO_PEAK_INTERVAL  (debug ? 6000 : 400)
 
 // Il testo dei messaggi UDP
 // NB: viene anteposto a queste stringhe l'identificativo dell'arduino che ha generato il messaggio
@@ -31,10 +31,9 @@
 
 
 // Definizione Pin Digitali
-int ledRedPins[]    = { 4, 6, 8, 10 };  // An array of pin numbers to which LEDs are attached
-int ledGreenPins[]  = { 5, 7, 9, 11 };  // An array of pin numbers to which LEDs are attached
-int dipSwitchPins[] = { 0, 1, 2, 3  };  // An array of pin numbers to which Dip Switch is attached
-					// L'ultimo pin è di debug
+int ledRedPins[]    = { 4, 6, 8, 10 };  // Array dei pin dei LED (terminali rossi)
+int ledGreenPins[]  = { 5, 7, 9, 11 };  // Array dei pin dei LED (terminali verdi)
+int dipSwitchPins[] = { 0, 1, 2, 3  };  // Array dei pin del Dip Switch (L'ultimo pin se On indica modalità di debug)
 // Definizione Pin Analogici
 int micPin = 0;
 int pirPin = 1;
@@ -53,7 +52,7 @@ int thisRoomId = 0;
 boolean debug = false;
 
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
-unsigned long lastPeekTime = 0;
+unsigned long lastPeakTime = 0;
 
 // MAC address della scheda Ethernet
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
@@ -144,7 +143,7 @@ boolean updateStatusOfThisRoom()
   //debugValue("Microfono", micValue);
 
   if (micValue > MIC_THRESHOLD) {
-    lastPeekTime = millis();
+    lastPeakTime = millis();
     roomStatus[thisRoomId] = BUSY;
   }
 
@@ -152,18 +151,18 @@ boolean updateStatusOfThisRoom()
   int pirValue = analogRead(pirPin);
   //debugValue("PIR", pirValue);
   if (pirValue > PIR_THRESHOLD) {
-    lastPeekTime = millis();
+    lastPeakTime = millis();
     roomStatus[thisRoomId] = BUSY;
   }
 
   unsigned long clock = millis();
   if (roomStatus[thisRoomId] == BUSY) {
-    if (clock < lastPeekTime) {
+    if (clock < lastPeakTime) {
       // Gestione clock overflow
-      lastPeekTime = 0;
+      lastPeakTime = 0;
     }
-    if (clock > lastPeekTime + NO_PEEK_INTERVAL) {
-      // Sono trascorsi NO_PEEK_INTERVAL millisecondi senza rilevare picchi su microfono e pir
+    if (clock > lastPeakTime + NO_PEAK_INTERVAL) {
+      // Sono trascorsi "noPeakInterval" millisecondi senza rilevare picchi su microfono e pir
       // La risorsa monitorata da Artuino diventa FREE
       roomStatus[thisRoomId] = FREE;
     }
