@@ -39,7 +39,7 @@ int dipSwitchPins[] = { 0, 1, 2, 3  };  // An array of pin numbers to which Dip 
 int micPin = 0;
 int pirPin = 1;
 
-// Istante di ricezione (invio) dell'ultimo pacchetto UPD da ciascun Arduino
+// Istante di ricezione (invio) dell'ultimo pacchetto UPD da/per ciascun Arduino
 unsigned long recTime[] = { 0, 0, 0, 0 };
 
 // Stato delle varie stanze
