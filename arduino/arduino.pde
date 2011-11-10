@@ -15,6 +15,11 @@
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
 #define NO_PEAK_INTERVAL  5000
 
+// In modalità di debug il LED della stanza corrente diventerà Rosso
+// solo in corrispondenza delle rilevazioni di BUSY di microfono o pir
+// per il seguente numero di millisecondi
+#define RED_PEAK_DURATION  333
+
 // Il testo dei messaggi UDP
 // NB: viene anteposto a queste stringhe l'identificativo dell'arduino che ha generato il messaggio
 #define UDP_MSG_FREE   "FREE"
@@ -76,6 +81,10 @@ unsigned int remotePort;
 char inBuffer[UDP_TX_PACKET_MAX_SIZE];  // Buffer to hold incoming packet,
 char msgBuffer[UDP_TX_PACKET_MAX_SIZE]; // String to send to other device
 
+// Questo flag indica se lo stato BUSY deve essere mostrato o meno in Verde
+// Vale solo per la modalità di debug. Vedi RED_PEAK_DURATION
+boolean showBusyAsGreen = false;
+
 
 // Mostra lo stato di una stanza accendendo o spegnendo il LED corrispondente
 void showRoomStatus(int roomNumber)
@@ -87,9 +96,15 @@ void showRoomStatus(int roomNumber)
       digitalWrite(ledGreenPins[roomNumber], HIGH);
       break;
     case BUSY:
-      // Rossi
-      digitalWrite(ledRedPins[roomNumber], HIGH);
-      digitalWrite(ledGreenPins[roomNumber], LOW);
+    if (debug && roomNumber == thisRoomId && showBusyAsGreen) {
+        // Verde
+        digitalWrite(ledRedPins[roomNumber], LOW);
+        digitalWrite(ledGreenPins[roomNumber], HIGH);
+      } else {
+        // Rossi
+        digitalWrite(ledRedPins[roomNumber], HIGH);
+        digitalWrite(ledGreenPins[roomNumber], LOW);
+      }
       break;
     case UNKNOWN:
       // Arancione
@@ -166,11 +181,15 @@ boolean updateStatusOfThisRoom()
       // La risorsa monitorata da Artuino diventa FREE
       roomStatus[thisRoomId] = FREE;
     }
+    // NB: In modalità di debug il LED della stanza corrente diventerà Rosso
+    //     solo in corrispondenza delle rilevazioni di BUSY di microfono o pir
+    //     per soli RED_PEAK_DURATION millisecondi
+    showBusyAsGreen = (debug && clock > lastPeakTime + RED_PEAK_DURATION);
   } else {
     roomStatus[thisRoomId] = FREE;
   }
   boolean statusChanged = (roomStatus[thisRoomId] != oldStatus);
-  if (statusChanged) {
+  if (statusChanged || (debug && roomStatus[thisRoomId] == BUSY)) {
     showRoomStatus(thisRoomId);
   }
   return statusChanged;
