@@ -36,9 +36,9 @@
 
 
 // Definizione Pin Digitali
-int ledRedPins[]    = { 4, 6, 8, 10 };  // Array dei pin dei LED (terminali rossi)
-int ledGreenPins[]  = { 5, 7, 9, 11 };  // Array dei pin dei LED (terminali verdi)
-int dipSwitchPins[] = { 0, 1, 2, 3  };  // Array dei pin del Dip Switch (L'ultimo pin se On indica modalità di debug)
+int ledRedPins[]    = { 6, 8, 10, 12 };  // Array dei pin dei LED (terminali rossi)
+int ledGreenPins[]  = { 7, 9, 11, 13 };  // Array dei pin dei LED (terminali verdi)
+int dipSwitchPins[] = { 2, 3,  4,  5 };  // Array dei pin del Dip Switch (L'ultimo pin se On indica modalità di debug)
 // Definizione Pin Analogici
 int micPin = 0;
 int pirPin = 1;
@@ -96,7 +96,7 @@ void showRoomStatus(int roomNumber)
       digitalWrite(ledGreenPins[roomNumber], HIGH);
       break;
     case BUSY:
-    if (debug && roomNumber == thisRoomId && showBusyAsGreen) {
+      if (debug && roomNumber == thisRoomId && showBusyAsGreen) {
         // Verde
         digitalWrite(ledRedPins[roomNumber], LOW);
         digitalWrite(ledGreenPins[roomNumber], HIGH);
@@ -316,7 +316,7 @@ int dipSwitchRead()
   int result = 0;
   for (int i = 0; i < 4; i++) {
     int digitalValue = digitalRead(dipSwitchPins[i]);
-    if (digitalValue == HIGH) {
+    if (digitalValue == LOW) {
       result += (1 << i);
     }
   }
@@ -341,6 +341,7 @@ void setup()
     pinMode(ledRedPins[i], OUTPUT);
     pinMode(ledGreenPins[i], OUTPUT);
     pinMode(dipSwitchPins[i], INPUT);
+    digitalWrite(dipSwitchPins[i], HIGH); // Set pullup resistor on
   }
 
   // Lettura valore decimale impostato sul dip switch
