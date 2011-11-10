@@ -17,8 +17,15 @@ Ogni sala riunione (massimo 4) può assumere uno dei seguenti stati
 L'identificativo numerico di ciascun Arduino è letto dai primi 2 pin di un Dip Switch.
 Ogni Led è associato quindi in maniera posizionale ai vari identificativi numerici.
 Questi identificativi numerici sono anche utilizzati per definire l'ultimo byte dell'indirizzo IP e del MAC address della scheda di rete Ethernet.
+
 Il 4° pin del Dip Switch indica se Arduino parte in modalità di debug.
 In questa modalità arduino invia sulla seriale varie informazioni utili per la verifica del corretto funzionamento del dispositivo.
 Inoltre in questa modalità il LED corrispondente alla stanza corrente diventerà Rosso solo in corrispondenza di rilevazioni BUSY effettuate da microfono o pir per alcuni millisecondi.
+
+I pacchetti UDP broadcast inviati sono lunghi 5 byte: 
+Il primo carattere è l'identificativo numerico della stanza.
+I successivi caratteri invece indicano lo stato della stanza: "FREE" o "BUSY".
+Es: "2FREE", "3BUSY", ...
+
 
 
