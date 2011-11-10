@@ -13,7 +13,7 @@
 #define PIR_THRESHOLD 1023
 
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
-#define NO_PEAK_INTERVAL  (debug ? 6000 : 333)
+#define NO_PEAK_INTERVAL  5000
 
 // Il testo dei messaggi UDP
 // NB: viene anteposto a queste stringhe l'identificativo dell'arduino che ha generato il messaggio
@@ -234,8 +234,10 @@ void handleReceivedPacket(byte remoteIp[], char message[])
     Serial.print(message);
     Serial.println("]");
   }
-
-  if (roomNumber >= 0 && roomNumber < 4) {
+  
+  if (roomNumber == thisRoomId) {
+    debugValue("Rilevamento conflitto sul RoomNumber", roomNumber);
+  } else if (roomNumber >= 0 && roomNumber < 4) {
     if (strcmp(message, UDP_MSG_FREE) == 0) {
       recTime[roomNumber] = millis();
       roomStatus[roomNumber] = FREE;
@@ -315,7 +317,7 @@ void setup()
   analogReference(DEFAULT);
   delay(1500);
   
-  // Setup digital and analog pins (INPUT/OUTPUT)
+  // Setup digital pins (INPUT/OUTPUT)
   for (int i = 0; i < 4; i++) {
     pinMode(ledRedPins[i], OUTPUT);
     pinMode(ledGreenPins[i], OUTPUT);
@@ -363,11 +365,11 @@ void loop()
   // se non si ricevono pacchetti di aggiornamento dalla rete
   checkAndUpdateStatusOfOtherRooms();
   
-  // Aggiornamento dello stato della stanza (utilizzando i sensori)
+  // Aggiornamento dello stato di questa stanza (utilizzando i sensori)
   boolean statusChanged = updateStatusOfThisRoom();
   
   if (statusChanged || itsTimeToSendAnUpdate()) {
-    // Invio aggiornamento di stato in broadcast (remote IP)
+    // Invio aggiornamento di stato in broadcast
     String strBuffer = String(thisRoomId) + getUdpMessageStatus(roomStatus[thisRoomId]);
     strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
     Udp.sendPacket(msgBuffer, broadcastIp, port);
