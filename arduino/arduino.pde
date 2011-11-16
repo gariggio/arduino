@@ -121,12 +121,14 @@ void showRoomStatus(int roomNumber)
       digitalWrite(ledGreenPins[roomNumber], LOW);
       break;
   }
+  /*
   if (debug) {
     Serial.print("Led ");
     Serial.print(roomNumber);
     Serial.print(" ");
     Serial.println(getUdpMessageStatus(roomStatus[roomNumber]));
   }
+  */
 }
 
 
