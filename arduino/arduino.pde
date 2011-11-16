@@ -56,6 +56,10 @@ int thisRoomId = 0;
 // Modalità di debug? E' stabilita dal Dip Switch.
 boolean debug = false;
 
+// Se il led della stanza corrente mostra in rosso solo il picco del sensore.
+// E' stabilita dal Dip Switch.
+boolean showPeak = false;
+
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
 unsigned long lastPeakTime = 0;
 
@@ -96,7 +100,7 @@ void showRoomStatus(int roomNumber)
       digitalWrite(ledGreenPins[roomNumber], HIGH);
       break;
     case BUSY:
-      if (debug && roomNumber == thisRoomId && showBusyAsGreen) {
+      if (showPeak && roomNumber == thisRoomId && showBusyAsGreen) {
         // Verde
         digitalWrite(ledRedPins[roomNumber], LOW);
         digitalWrite(ledGreenPins[roomNumber], HIGH);
@@ -184,7 +188,7 @@ boolean updateStatusOfThisRoom()
     // NB: In modalità di debug il LED della stanza corrente diventerà Rosso
     //     solo in corrispondenza delle rilevazioni di BUSY di microfono o pir
     //     per soli RED_PEAK_DURATION millisecondi
-    showBusyAsGreen = (debug && clock > lastPeakTime + RED_PEAK_DURATION);
+    showBusyAsGreen = (showPeak && clock > lastPeakTime + RED_PEAK_DURATION);
   } else {
     roomStatus[thisRoomId] = FREE;
   }
@@ -316,14 +320,15 @@ int dipSwitchRead()
   int result = 0;
   for (int i = 0; i < 4; i++) {
     int digitalValue = digitalRead(dipSwitchPins[i]);
+    // Il Dip Switch è coonfigurato sulle porte digitali in Pull up Resistor
+    // Acceso = LOW.
     if (digitalValue == LOW) {
       result += (1 << i);
     }
   }
   // Siamo in modalità di debug se è HIGH il quarto pin del Dip Switch
-  debug = (result >= 8);
-  // TODO: eliminare 
-  debug = true;
+  debug = (result & 8); 
+  showPeak = (result & 4);
   return result;
 }
 
