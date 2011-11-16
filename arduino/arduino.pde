@@ -193,7 +193,7 @@ boolean updateStatusOfThisRoom()
     roomStatus[thisRoomId] = FREE;
   }
   boolean statusChanged = (roomStatus[thisRoomId] != oldStatus);
-  if (statusChanged || (debug && roomStatus[thisRoomId] == BUSY)) {
+  if (statusChanged || (showPeak && roomStatus[thisRoomId] == BUSY)) {
     showRoomStatus(thisRoomId);
   }
   return statusChanged;
