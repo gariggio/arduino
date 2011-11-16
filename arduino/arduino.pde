@@ -331,7 +331,7 @@ int dipSwitchRead()
 void setup()
 {
   // Start serial
-  Serial.begin(9600);
+  Serial.begin(57600);
   
   analogReference(DEFAULT);
   delay(1500);
