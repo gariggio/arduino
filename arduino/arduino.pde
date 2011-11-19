@@ -48,8 +48,10 @@ int ledGreenPins[]  = { 3, 5, 7, 9 };  // Array dei pin dei LED (terminali verdi
 // Definizione Pin Analogici del Dip Switch
 int dipSwitchPins[] = { A1, A2, A3, A4 };  // L'ultimo pin se On indica modalità di debug
 
-// Definizione Pin Analogici
+// Definizione Pin Analogico per Microfono
 int micPin = A5;
+
+// Definizione Pin Analogico per Sensore di movimento
 int pirPin = A0;
 
 // Istante di ricezione (invio) dell'ultimo pacchetto UPD da/per ciascun Arduino
