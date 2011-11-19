@@ -30,18 +30,27 @@
 
 // Se non si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
 // lo stato della stanza diventa UNKNOWN.
-// Se NON si ricevono pacchetti per 3 volte questo tempo lo stato diventa OFF.
-#define UDP_NO_PACKET_INTERVAL    40000
+#define UDP_NO_PACKET_INTERVAL    15000
+
+// Se NON si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
+// lo stato della stanza diventa OFF.
+#define OFF_INTERVAL    30000
+
+// Byte meno significativo dell'indirizzo IP della stanza 0
 #define IP_START 100
 
 
-// Definizione Pin Digitali
-int ledRedPins[]    = { 6, 8, 10, 12 };  // Array dei pin dei LED (terminali rossi)
-int ledGreenPins[]  = { 7, 9, 11, 13 };  // Array dei pin dei LED (terminali verdi)
-int dipSwitchPins[] = { 2, 3,  4,  5 };  // Array dei pin del Dip Switch (L'ultimo pin se On indica modalità di debug)
+// Definizione Pin Digitali dei Led
+// ATTENZIONE: La ethernet shields utilizza i pin digitali 10, 11, 12 e 13!
+int ledRedPins[]    = { 2, 4, 6, 8 };  // Array dei pin dei LED (terminali rossi)
+int ledGreenPins[]  = { 3, 5, 7, 9 };  // Array dei pin dei LED (terminali verdi)
+
+// Definizione Pin Analogici del Dip Switch
+int dipSwitchPins[] = { A1, A2, A3, A4 };  // L'ultimo pin se On indica modalità di debug
+
 // Definizione Pin Analogici
-int micPin = 0;
-int pirPin = 1;
+int micPin = A5;
+int pirPin = A0;
 
 // Istante di ricezione (invio) dell'ultimo pacchetto UPD da/per ciascun Arduino
 unsigned long recTime[] = { 0, 0, 0, 0 };
@@ -57,7 +66,7 @@ int thisRoomId = 0;
 boolean debug = false;
 
 // Se il led della stanza corrente mostra in rosso solo il picco del sensore.
-// E' stabilita dal Dip Switch.
+// E' stabilita dal Dip Switch (terzo pin).
 boolean showPeak = false;
 
 // Istante di rilevazione dell'ultimo picco da uno dei sensori
@@ -105,7 +114,7 @@ void showRoomStatus(int roomNumber)
         digitalWrite(ledRedPins[roomNumber], LOW);
         digitalWrite(ledGreenPins[roomNumber], HIGH);
       } else {
-        // Rossi
+        // Rosso
         digitalWrite(ledRedPins[roomNumber], HIGH);
         digitalWrite(ledGreenPins[roomNumber], LOW);
       }
@@ -121,14 +130,12 @@ void showRoomStatus(int roomNumber)
       digitalWrite(ledGreenPins[roomNumber], LOW);
       break;
   }
-  /*
   if (debug) {
     Serial.print("Led ");
     Serial.print(roomNumber);
     Serial.print(" ");
     Serial.println(getUdpMessageStatus(roomStatus[roomNumber]));
   }
-  */
 }
 
 
@@ -175,7 +182,9 @@ boolean updateStatusOfThisRoom()
     lastPeakTime = millis();
     roomStatus[thisRoomId] = BUSY;
   }
-
+  
+  
+  boolean showBusyAsGreenOld = showBusyAsGreen;
   unsigned long clock = millis();
   if (roomStatus[thisRoomId] == BUSY) {
     if (clock < lastPeakTime) {
@@ -194,8 +203,9 @@ boolean updateStatusOfThisRoom()
   } else {
     roomStatus[thisRoomId] = FREE;
   }
+  boolean busyColorChanged = (showBusyAsGreenOld != showBusyAsGreen);
   boolean statusChanged = (roomStatus[thisRoomId] != oldStatus);
-  if (statusChanged || (showPeak && roomStatus[thisRoomId] == BUSY)) {
+  if (statusChanged || busyColorChanged) {
     showRoomStatus(thisRoomId);
   }
   return statusChanged;
@@ -229,6 +239,9 @@ void debugPacket(char* str, byte ip[], int port, char* packet)
     Serial.print(int(ip[3]));
     Serial.print(":");
     Serial.print(port);
+    Serial.print(" ");
+    Serial.print(millis());
+    Serial.print("ms.");
     if (packet != "") {
       Serial.print(" \"");
       Serial.print(packet);
@@ -245,7 +258,6 @@ void handleReceivedPacket(byte remoteIp[], char message[])
 {
   // TODO: stabilire come determinare il roomNumber.
   // Dall'IP o da un identificativo dentro al pacchetto?
-  
   //int roomNumber = remoteIp[3] - IP_START;
   int roomNumber = int(message[0]) - int('0');
   for (int i=1; i<=strlen(message); i++) {
@@ -292,11 +304,11 @@ void checkAndUpdateStatusOfOtherRooms()
       }
       if (roomStatus[i] < UNKNOWN) {
         if (clock > recTime[i] + UDP_NO_PACKET_INTERVAL) {
-	  roomStatus[i] = UNKNOWN;
+  	  roomStatus[i] = UNKNOWN;
           showRoomStatus(i);
         }
       } else if (roomStatus[i] == UNKNOWN) {
-        if (clock > recTime[i] + 3 * UDP_NO_PACKET_INTERVAL) {
+        if (clock > recTime[i] + OFF_INTERVAL) {
           roomStatus[i] = OFF;
 	  showRoomStatus(i);
         }
@@ -321,10 +333,10 @@ int dipSwitchRead()
 {
   int result = 0;
   for (int i = 0; i < 4; i++) {
-    int digitalValue = digitalRead(dipSwitchPins[i]);
-    // Il Dip Switch è coonfigurato sulle porte digitali in Pull up Resistor
-    // Acceso = LOW.
-    if (digitalValue == LOW) {
+    int digitalValue = analogRead(dipSwitchPins[i]);
+    // Il Dip Switch è coonfigurato sulle porte analogiche in Pull up Resistor
+    // Acceso = LOW value.
+    if (digitalValue < 100) {
       result += (1 << i);
     }
   }
@@ -337,19 +349,18 @@ int dipSwitchRead()
 
 void setup()
 {
-  // Start serial
   Serial.begin(57600);
   
-  analogReference(DEFAULT);
-  delay(1500);
-  
-  // Setup digital pins (INPUT/OUTPUT)
+  // Setup digital/analog pins (INPUT/OUTPUT)
   for (int i = 0; i < 4; i++) {
     pinMode(ledRedPins[i], OUTPUT);
     pinMode(ledGreenPins[i], OUTPUT);
+    showRoomStatus(i); // Visualizzazione stato iniziale dei Led (UNKNOWN)
     pinMode(dipSwitchPins[i], INPUT);
-    digitalWrite(dipSwitchPins[i], HIGH); // Set pullup resistor on
+    digitalWrite(dipSwitchPins[i], HIGH); // Dip Switch in Pull up Resistor
   }
+
+  delay(1000);
 
   // Lettura valore decimale impostato sul dip switch
   int dipSwitchValue = dipSwitchRead();
@@ -357,22 +368,18 @@ void setup()
 
   // I primi 2 pin del dipSwitch determinano l'identificativo numerico dato a questo Arduino 
   thisRoomId = (dipSwitchValue % 4);
-
-  // Visualizzazione dello stato iniziale dei Led (UNKNOWN)
-  for (int i=0; i<4; i++) {
-    showRoomStatus(i);
-  }
-
+  debugValue("Room Id", thisRoomId);
+  
   // Set dell'ultimo numero dell'indirizzo IP e del MAC Address
   ip[3] = IP_START + thisRoomId;
   mac[5] = thisRoomId;
   debugPacket("IP Address:", ip, port, "");
-
+  
   // Start Ethernet and UDP
   Ethernet.begin(mac, ip);
   Udp.begin(port);
-  
-  delay(2000);
+
+  delay(1000);
 }
 
 
@@ -381,7 +388,7 @@ void loop()
 {
   int packetSize = Udp.available(); // note that this includes the UDP header
   if (packetSize) {
-    packetSize = packetSize - 8; // subtract the 8 byte header
+    // packetSize = packetSize - 8; // subtract the 8 byte header
     // Lettura pacchetto
     Udp.readPacket(inBuffer, UDP_TX_PACKET_MAX_SIZE, remoteIp, remotePort);
     debugPacket("Received Packet:", remoteIp, remotePort, inBuffer);
