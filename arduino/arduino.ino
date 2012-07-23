@@ -1,6 +1,12 @@
-#include <SPI.h>         // needed for Arduino versions later than 0018
+#include <SPI.h>
+// #include <Dhcp.h>
+// #include <Dns.h>
 #include <Ethernet.h>
-#include <Udp.h>         // UDP library from: bjoern@cs.stanford.edu 12/30/2008
+// #include <EthernetClient.h>
+// #include <EthernetServer.h>
+#include <EthernetUdp.h>
+#include <util.h>
+
 
 // Stati delle stanze
 #define FREE    1
@@ -13,7 +19,7 @@
 #define PIR_THRESHOLD 1023
 
 // Se i sensori non rilevano nulla per questo numero di millisecondi consideriamo la stanza FREE
-#define NO_PEAK_INTERVAL  5000
+#define NO_PEAK_INTERVAL  30000
 
 // In modalità di debug il LED della stanza corrente diventerà Rosso
 // solo in corrispondenza delle rilevazioni di BUSY di microfono o pir
@@ -26,7 +32,7 @@
 #define UDP_MSG_BUSY   "BUSY"
 
 // Frequenza d'invio dei pacchetti UDP broadcast di aggiornamento di stato verso gli altri Arduino
-#define UDP_SEND_STATUS_FREQUENCY  5000
+#define UDP_SEND_STATUS_FREQUENCY  6000
 
 // Se non si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
 // lo stato della stanza diventa UNKNOWN.
@@ -34,10 +40,10 @@
 
 // Se NON si ricevono pacchetti dagli altri Arduino per questo numero di millisecondi
 // lo stato della stanza diventa OFF.
-#define OFF_INTERVAL    30000
+#define OFF_INTERVAL    60000
 
 // Byte meno significativo dell'indirizzo IP della stanza 0
-#define IP_START 100
+#define IP_START 31
 
 
 // Definizione Pin Digitali dei Led
@@ -78,13 +84,17 @@ unsigned long lastPeakTime = 0;
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
 // Indirizzo IP della scheda Ethernet
-byte ip[4]  = { 192, 168, 0, IP_START };
+IPAddress ip(192, 168, 11, IP_START);
 
 // Broadcast IP (dove inviare i pacchetti UDP broadcast)
-byte broadcastIp[4] = { 192, 168, 0, 255 };
+IPAddress broadcastIp(192, 168, 11, 255);
+
+// IP di un server su un'altra rete dove inviare pacchetti UDP con lo stato di arduino
+IPAddress unicastIp(192, 168, 1, 23);
 
 // Remote IP (da quale indirizzo ho ricevuto l'ultimo pacchetto UDP)
-byte remoteIp[4] = { 0, 0, 0, 0 };
+IPAddress remoteIp(0, 0, 0, 0);
+
 
 // Local port to listen on
 unsigned int port = 9876;
@@ -100,6 +110,8 @@ char msgBuffer[UDP_TX_PACKET_MAX_SIZE]; // String to send to other device
 // Vale solo per la modalità di debug. Vedi RED_PEAK_DURATION
 boolean showBusyAsGreen = false;
 
+// An EthernetUDP instance to let us send and receive packets over UDP
+EthernetUDP Udp;
 
 // Mostra lo stato di una stanza accendendo o spegnendo il LED corrispondente
 void showRoomStatus(int roomNumber)
@@ -227,18 +239,18 @@ void debugValue(char* str, int value)
 
 
 // Stampa sulla seriale le informazioni di un Pacchetto
-void debugPacket(char* str, byte ip[], int port, char* packet)
+void debugPacket(char* str, IPAddress ip, int port, char* packet)
 {
   if (debug) {
     Serial.print(str);
     Serial.print(" ");
-    Serial.print(int(ip[0]));
+    Serial.print(ip[0], DEC);
     Serial.print(".");
-    Serial.print(int(ip[1]));
+    Serial.print(ip[1], DEC);
     Serial.print(".");
-    Serial.print(int(ip[2]));
+    Serial.print(ip[2], DEC);
     Serial.print(".");
-    Serial.print(int(ip[3]));
+    Serial.print(ip[3], DEC);
     Serial.print(":");
     Serial.print(port);
     Serial.print(" ");
@@ -256,7 +268,7 @@ void debugPacket(char* str, byte ip[], int port, char* packet)
 
 
 // Gestione di un Pacchetto UDP rivevuto
-void handleReceivedPacket(byte remoteIp[], char message[])
+void handleReceivedPacket(IPAddress remoteIp, char message[])
 {
   // TODO: stabilire come determinare il roomNumber.
   // Dall'IP o da un identificativo dentro al pacchetto?
@@ -349,9 +361,29 @@ int dipSwitchRead()
 }
 
 
+// Invia i pacchetti con lo stato di Arduino
+void sendPackets()
+{
+    // Invio aggiornamento di stato in broadcast
+    String strBuffer = String(thisRoomId) + getUdpMessageStatus(roomStatus[thisRoomId]);
+    strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
+    
+    Udp.beginPacket(broadcastIp, port);
+    Udp.write(msgBuffer);
+    Udp.endPacket();
+    debugPacket("Sent Packet:", broadcastIp, port, msgBuffer);
+    recTime[thisRoomId] = millis();
+    
+    Udp.beginPacket(unicastIp, port);
+    Udp.write(msgBuffer);
+    Udp.endPacket();
+    debugPacket("Sent Packet:", unicastIp, port, msgBuffer);
+}
+
+
 void setup()
 {
-  Serial.begin(57600);
+  Serial.begin(9600);
   
   // Setup digital/analog pins (INPUT/OUTPUT)
   for (int i = 0; i < 4; i++) {
@@ -388,11 +420,13 @@ void setup()
 
 void loop()
 {
-  int packetSize = Udp.available(); // note that this includes the UDP header
+  int packetSize = Udp.parsePacket();
   if (packetSize) {
     // packetSize = packetSize - 8; // subtract the 8 byte header
     // Lettura pacchetto
-    Udp.readPacket(inBuffer, UDP_TX_PACKET_MAX_SIZE, remoteIp, remotePort);
+    Udp.read(inBuffer, UDP_TX_PACKET_MAX_SIZE);
+    remoteIp = Udp.remoteIP();
+    remotePort = Udp.remotePort();
     debugPacket("Received Packet:", remoteIp, remotePort, inBuffer);
     handleReceivedPacket(remoteIp, inBuffer);
   }
@@ -405,12 +439,8 @@ void loop()
   boolean statusChanged = updateStatusOfThisRoom();
   
   if (statusChanged || itsTimeToSendAnUpdate()) {
-    // Invio aggiornamento di stato in broadcast
-    String strBuffer = String(thisRoomId) + getUdpMessageStatus(roomStatus[thisRoomId]);
-    strBuffer.toCharArray(msgBuffer, UDP_TX_PACKET_MAX_SIZE);
-    Udp.sendPacket(msgBuffer, broadcastIp, port);
-    debugPacket("Sent Packet:", broadcastIp, port, msgBuffer);
-    recTime[thisRoomId] = millis();
+    // Invio aggiornamento di stato in broadcast, unicast e unicastDebug
+    sendPackets();
   }
 }
 
